@@ -12,6 +12,9 @@ import "core:crypto/hash"
 
 ROUND_COUNT :: 3
 
+VIOLATION_REMOVE        :: true
+VIOLATION_SIGNATURE     :: false
+
 Country :: enum {
     Ukraine,
     Russia,
@@ -132,7 +135,7 @@ main :: proc () {
 
                 next, ok := rsa.encrypt_long(&v.key_pub, bytes)
                 if !ok {
-                    fmt.println("\tFATAL: failed encryption")
+                    fmt.panicf("\tFATAL: failed encryption")
                 }
 
                 delete(bytes)
@@ -168,7 +171,7 @@ main :: proc () {
 
                 result := rsa.verify(&voters[voterId].key_pub, buffer[:], lastSignature)
                 if !result {
-                    fmt.println("\tFATAL: signature bad")
+                    fmt.panicf("\tFATAL: signature bad")
                 }
                 else {
                     fmt.println("\tSignature verified")
@@ -178,7 +181,7 @@ main :: proc () {
             for &b in ballots {
                 uncovered, ok := rsa.decrypt_long(&p.key_prv, b)
                 if !ok {
-                    fmt.println("\tFATAL: failed decryption")
+                    fmt.panicf("\tFATAL: failed decryption")
                 }
 
                 delete(b)
@@ -202,17 +205,27 @@ main :: proc () {
             }
 
             if !found {
-                fmt.printfln("\tFATAL: Failed to find their own ballot")
+                fmt.panicf("\tFATAL: Failed to find their own ballot")
             }
 
             rand.shuffle(ballots[:])
             fmt.printfln("\tShuffled ballots")
 
+            if VIOLATION_REMOVE && round == 1 && personId == 1 {
+                fmt.printfln("VIOLATION: removing a random ballot")
+                unordered_remove(&ballots, rand.int_range(0, 5))
+            }
+
             buffer : [dynamic]u8
             defer delete(buffer)
             for &b in ballots { append(&buffer, ..b) }
 
-            lastSignature = rsa.sign(&p.key_prv, buffer[:])
+            if VIOLATION_SIGNATURE && round == 0 && personId == 2 {
+                fmt.printfln("VIOLATION: failing a signature")
+            }
+            else {
+                lastSignature = rsa.sign(&p.key_prv, buffer[:])
+            }
 
             fmt.printfln("\tSigned uncovered ballots")
         }
@@ -222,8 +235,7 @@ main :: proc () {
     fmt.printfln("REVEALING BALLOTS")
     for &b in ballots {
         if len(b) != size_of(Ballot) {
-            fmt.println("FATAL: Ballot is bad")
-            continue
+            fmt.panicf("FATAL: Ballot is bad")
         }
 
         ballot := (cast(^Ballot)raw_data(b))^
