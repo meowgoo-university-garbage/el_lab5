@@ -44,6 +44,7 @@ Candidate :: struct {
 
 
 Voter :: struct {
+    fullname : string,
     key_pub : rsa.Key_Public,
 }
 
@@ -81,7 +82,8 @@ main :: proc () {
     voters : [dynamic]Voter
     for &p in people {
         append(&voters, Voter{
-            key_pub = p.key_pub
+            fullname = p.fullname,
+            key_pub = p.key_pub,
         })
     }
     fmt.println()
@@ -93,21 +95,11 @@ main :: proc () {
         Candidate{ id = 69, fullname = "Amogus",           votes = 0 },
     }
 
-
-
-    if false {
-        payload, ok1 := rsa.encrypt(&people[0].key_pub, { 1, 2, 3 })
-        fmt.println(len(payload), ok1)
-
-        test, ok2 := rsa.encrypt_long(&people[0].key_pub, payload)
-        fmt.println(len(test), ok2)
-
-        result, ok3 := rsa.decrypt_long(&people[0].key_prv, test)
-        fmt.println(len(result), ok3)
-
-        restore, ok4 := rsa.decrypt(&people[0].key_prv, result)
-        fmt.println(restore, ok4)
+    fmt.println("List of candidates")
+    for c in candidates {
+        fmt.printfln("%v", c.fullname)
     }
+    fmt.println()
 
 
 
@@ -117,14 +109,18 @@ main :: proc () {
         candidate := rand.choice(candidates)
         ballot := Ballot{ candidate_id = candidate.id }
 
+        fmt.printfln("Voter %v chooses candidate %v", p.fullname, candidate.fullname)
+
         bytes : []u8 = slice.bytes_from_ptr(&ballot, size_of(Ballot))
         bytes = slice.clone(bytes)
 
         for round in 0 ..< ROUND_COUNT {
+            fmt.printfln("\tEncryption round %v", round)
             #reverse for &v, voterId in voters {
                 if voterId == personId {
                     salt := rand.uint64()
                     inject_at(&p.rememberedSalts, 0, salt)
+                    fmt.printfln("\tRemembered salt: %v", salt)
 
                     saltedBytes : [dynamic]u8
                     append(&saltedBytes, ..slice.bytes_from_ptr(&salt, size_of(u64)))
@@ -136,7 +132,7 @@ main :: proc () {
 
                 next, ok := rsa.encrypt_long(&v.key_pub, bytes)
                 if !ok {
-                    fmt.println("FATAL: failed encryption")
+                    fmt.println("\tFATAL: failed encryption")
                 }
 
                 delete(bytes)
@@ -145,6 +141,7 @@ main :: proc () {
         }
 
         append(&ballots, bytes)
+        fmt.printfln("Added ballot")
     }
 
 
@@ -152,8 +149,13 @@ main :: proc () {
 
     fmt.println(len(ballots[0]))
 
+    fmt.printfln("UNCOVERING VOTES")
     for round in 0 ..< ROUND_COUNT {
+        fmt.printfln("--- ROUND %v", round)
+
         for &p, personId in people {
+            fmt.printfln("Voter %v uncovers the ballot pile", p.fullname)
+
             if !(round == 0 && personId == 0) {
                 defer delete(lastSignature)
 
@@ -166,19 +168,23 @@ main :: proc () {
 
                 result := rsa.verify(&voters[voterId].key_pub, buffer[:], lastSignature)
                 if !result {
-                    fmt.println("FATAL: signature bad")
+                    fmt.println("\tFATAL: signature bad")
+                }
+                else {
+                    fmt.println("\tSignature verified")
                 }
             }
 
             for &b in ballots {
                 uncovered, ok := rsa.decrypt_long(&p.key_prv, b)
                 if !ok {
-                    fmt.println("FATAL: failed decryption")
+                    fmt.println("\tFATAL: failed decryption")
                 }
 
                 delete(b)
                 b = uncovered
             }
+            fmt.printfln("\tUncovered all ballots using their private key")
 
             found := false
             salt := p.rememberedSalts[round]
@@ -186,6 +192,7 @@ main :: proc () {
                 if !slice.has_prefix(b, slice.bytes_from_ptr(&salt, size_of(u64))) { continue }
 
                 found = true
+                fmt.printfln("\tFound their ballot marked with a random salt")
 
                 unsalted := slice.clone(b[size_of(u64):])
                 delete(b)
@@ -194,17 +201,25 @@ main :: proc () {
                 break
             }
 
-            fmt.println(found)
+            if !found {
+                fmt.printfln("\tFATAL: Failed to find their own ballot")
+            }
 
             rand.shuffle(ballots[:])
+            fmt.printfln("\tShuffled ballots")
 
             buffer : [dynamic]u8
             defer delete(buffer)
             for &b in ballots { append(&buffer, ..b) }
+
             lastSignature = rsa.sign(&p.key_prv, buffer[:])
+
+            fmt.printfln("\tSigned uncovered ballots")
         }
     }
+    fmt.println()
 
+    fmt.printfln("REVEALING BALLOTS")
     for &b in ballots {
         if len(b) != size_of(Ballot) {
             fmt.println("FATAL: Ballot is bad")
@@ -212,6 +227,12 @@ main :: proc () {
         }
 
         ballot := (cast(^Ballot)raw_data(b))^
-        fmt.println(ballot)
+
+        context.user_ptr = &ballot.candidate_id
+        ci, cf := slice.linear_search_proc(candidates, proc (c : Candidate) -> bool {
+            return (c.id == (cast(^u64)context.user_ptr)^)
+        })
+
+        fmt.printfln("Ballot for %v", candidates[ci].fullname)
     }
 }
