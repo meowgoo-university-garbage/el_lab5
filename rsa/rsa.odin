@@ -74,7 +74,7 @@ internal_powmod :: proc (input : []u8, pow : ^big.Int, mod : ^big.Int) -> (resul
 }
 
 encrypt :: proc (key : ^Key_Public, data : []u8) -> (cipher : []u8, ok : bool) {
-    (len(data) < MAX_LEN) or_return
+    (len(data) <= MAX_LEN) or_return
 
     mdata : [dynamic]u8
     defer delete(mdata)
@@ -92,7 +92,7 @@ decrypt :: proc (key : ^Key_Private, cipher : []u8) -> (data : []u8, ok : bool =
 
     (len(mdata) >= 2)       or_return
     (mdata[0] == PAD)       or_return
-    (mdata[1] < MAX_LEN)    or_return
+    (mdata[1] <= MAX_LEN)   or_return
 
     data = make([]u8, mdata[1])
     mem.copy(raw_data(data), raw_data(mdata[2:]), len(mdata) - 2)
@@ -109,7 +109,7 @@ encrypt_long :: proc (key : ^Key_Public, data : []u8) -> (cipher : []u8, ok : bo
     cipherd : [dynamic]u8
 
     for len(data) > 0 {
-        l := math.min(200, len(data))
+        l := math.min(MAX_LEN, len(data))
         segment := data[0:l]
         data = data[l:]
 
