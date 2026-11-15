@@ -73,7 +73,7 @@ internal_powmod :: proc (input : []u8, pow : ^big.Int, mod : ^big.Int) -> (resul
 }
 
 encrypt :: proc (key : ^Key_Public, data : []u8) -> (cipher : []u8, ok : bool) {
-    (len(data) < MAX_LEN) or_return
+    // (len(data) < MAX_LEN) or_return
 
     mdata : [dynamic]u8
     defer delete(mdata)
