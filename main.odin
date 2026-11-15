@@ -77,6 +77,20 @@ main :: proc () {
 
 
 
+    {
+        payload, ok1 := rsa.encrypt(&people[0].key_pub, { 1, 2, 3 })
+        fmt.println(len(payload), ok1)
+
+        test, ok2 := rsa.encrypt_long(&people[0].key_pub, payload)
+        fmt.println(len(test), ok2)
+
+        result, ok3 := rsa.decrypt_long(&people[0].key_prv, test)
+        fmt.println(len(result), ok3)
+
+        restore, ok4 := rsa.decrypt(&people[0].key_prv, result)
+        fmt.println(restore, ok4)
+    }
+
 
     candidates : []Candidate = {
         Candidate{ fullname = "Petro Poroshenko", votes = 0 },
